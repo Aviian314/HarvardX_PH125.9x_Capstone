@@ -238,14 +238,17 @@ rmses <- sapply(lambdas, function(lambda) {
   return(RMSE(predicted_ratings, test$rating))
 })
 
-# Visualize RMSE values to ensure we included a minimum for the lambdas.
-qplot(lambdas, rmses)  
 bestLambda <- lambdas[which.min(rmses)]
 regularizedRmse <- rmses[which.min(rmses)]
 
 bestLambda # 5
 regularizedRmse # 0.8650411
 
+# Visualize RMSE values to ensure we included a minimum for the lambdas.
+data.frame(lambdas, rmses) %>%
+  ggplot(aes(lambdas, rmses)) +
+  geom_point() +
+  labs(title = "RMSE vs Lambda", x = "Lambda", y = "RMSE")
 
 
 ##### Final Prediction #####

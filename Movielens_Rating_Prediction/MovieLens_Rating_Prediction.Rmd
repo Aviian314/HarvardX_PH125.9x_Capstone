@@ -1,6 +1,6 @@
 ---
 title: "HarvardX PH125.9x Data Science: Capstone  \nMovieLens Rating Prediction Project"
-author: "Joshua Hendrix"
+author: "me"
 date: "`r Sys.Date()`"
 output:
   pdf_document:
@@ -29,10 +29,12 @@ if (file.exists(dataFile)) {
   save(
   edx,
   final_holdout_test,
-  movieAvg,
   simpleRmse,
   movieEffectRmse,
   userEffectRmse,
+  lambdas,
+  rmses,
+  bestLambda,
   regularizedRmse,
   finalRmse,
   file = "prediction_data.RData")
@@ -43,7 +45,7 @@ if (file.exists(dataFile)) {
 
 Movie or TV show recommendations are an essential feature of most content distribution services, especially streaming services. The recommendation algorithm is an important part of keeping the user engaged by providing personal suggestions and promoting greater satisfaction. The recommendation algorithm also needs to account for several sources of bias when providing a recommendation to the user.
 
-The goal of this project is to develop a recommendation algorithm using statistical analysis and machine learning techniques. The dataset analyzed comes from MovieLens and contains 10 million entries. To evaluate the final prediction model, ten percent of the data will be randomly selected and stored in the `final_holdout_test` variable. The remaining data is split into training and test data sets for model development. Root Mean Squared Error (RMSE) is used as the evaluation metric throughout the algorithm development to measure prediction accuracy.
+The goal of this project is to develop a recommendation algorithm using statistical analysis and machine learning techniques. The dataset analyzed comes from MovieLens and contains 10 million entries. The analysis is performed using R version 4.4.1. To evaluate the final prediction model, ten percent of the data will be randomly selected and stored in the `final_holdout_test` variable. The remaining data is split into training and test data sets for model development. Root Mean Squared Error (RMSE) is used as the evaluation metric throughout the algorithm development to measure prediction accuracy.
 
 # Data Analysis
 
@@ -98,7 +100,7 @@ movie_avg_ratings %>%
        x = "Number of Ratings", y = "Average Rating")
 ```
 
-The plot shows a definitive upward average rating trend line as movies receive more ratings. The prediction model will need to take into account the popularity of movies and adjust its rating accordingly.
+Figure 2 shows a definitive upward average rating trend line as movies receive more ratings. The prediction model will need to take into account the popularity of movies and adjust its rating accordingly.
 
 However, movies with very few ratings (around ten or less) exhibit high variance in their average ratings, which may introduce bias. The prediction model should be cautions to not weigh them too heavily in the prediction process.
 
@@ -122,36 +124,187 @@ user_bias %>%
 
 Reviewing Figure 3, it can be seen that the user ratings deviation from mean rating follow a normal distribution with the mean being close to the movie's mean rating. The mean user bias is `r mean(user_bias$user_bias)` with a standard deviation of `r sd(user_bias$user_bias)`. Using the standard deviation, the data suggests that approximately 68% of users will rate a movie within a half point of the mean, and about 95% of the users will rate within one point of the mean. However, some users deviate from the mean by several standard deviations. Therefore, the prediction model will need to weigh the outliers less than the users that rate closer to the mean rating of movies.
 
+## Model Development Process
 
+The prediction model was developed in stages, starting with a simple baseline model and progressing through to models that take into account movie and user effects. Finally, regularization was used to reduce overfitting of data. All models were developed by splitting the training data into two sets: test and train. The initial dataset stored in `final_holdout_test` is saved for the final model testing and will not be used during model development.
 
+### Test and Train Datasets
 
+To train the models, the data must be split into training and testing sets. To prevent overfitting of data, each iteration of the model will use a different set of training and testing data selected using a random seed and the `createDataPartition` method. This step is performed for all models with varying seeds as shown:
 
+```{r, eval=FALSE}
+set.seed(100, sample.kind="Rounding")
+trainIndex <- createDataPartition(edx$rating, p=0.8, list=FALSE)
+train <- edx[trainIndex,]
+test <- edx[-trainIndex,]
+```
 
+where `train` is the larger dataset used to train the model and `test` is used to validate the model's accuracy utilizing RMSE.
+
+### Simple Baseline Model
+
+To get the baseline model, a simple average of all movie's rating can be taken.
+
+```{r, eval=FALSE}
+avgRating = mean(train$rating)
+
+simpleRmse <- RMSE(test$rating, avgRating)
+```
+
+The RMSE for the baseline is `r simpleRmse`
+
+### Movie Effects Model
+
+The training data is grouped by `movieId` and an average rating is taken for each one. This is then subtracted from the overall average movie rating to create the movie bias.
+
+```{r, eval=FALSE}
+avgRating = mean(train$rating)
+
+movieAvg <- train %>%
+  group_by(movieId) %>%
+  summarize(movieBias = mean(rating - avgRating))
+
+predictedRating <- avgRating + test %>%
+  left_join(movieAvg, by="movieId") %>%
+  pull(movieBias)
+
+movieEffectRmse <- RMSE(test$rating, predictedRating)
+```
+
+Adding movie effects to the model produces an RMSE of `r movieEffectRmse`, showing an improvement over the baseline model.
+
+### User Effects Model
+
+To improve on the model, user effects are added by grouping by `userId` and finding each users average rating that can skew ratings.
+
+```{r, eval=FALSE}
+avgRating = mean(train$rating)
+
+movieAvg <- train %>%
+  group_by(movieId) %>%
+  summarize(movieBias = mean(rating - avgRating))
+
+userAvg <- train %>%
+  group_by(userId) %>%
+  summarize(userBias = mean(rating - avgRating))
+
+predictedRating <- test %>%
+  left_join(userAvg, by="userId") %>%
+  left_join(movieAvg, by="movieId") %>%
+  mutate(pred = avgRating + userBias + movieBias) %>%
+  pull(pred)
+
+userEffectRmse <- RMSE(test$rating, predictedRating)
+```
+
+The extended model results in an RMSE of `r userEffectRmse`, which further improves on the model.
+
+### Regularized Model
+To address overfitting, regularization is applied to both the user and movie bias terms. This aids in minimizing the impact that a low number of ratings can have on the model. To do this, a penalty term is added for large biases which is tuned using the `lambda` parameter. To tune the model, several values for lambda are iterated and the one that minimizes the final RMSE value is chosen.
+
+```{r, eval=FALSE}
+lambdas <- seq(3, 7, 0.25)
+avgRating = mean(train$rating)
+
+rmses <- sapply(lambdas, function(lambda) {
+  # Movie Effect
+  b_movie <- train %>%
+    group_by(movieId) %>%
+    summarize(b_m = sum(rating - avgRating) / (n() + lambda))
+
+  # User Effect
+  b_user <- train %>%
+    left_join(b_movie, by="movieId") %>%
+    group_by(userId) %>%
+    summarize(b_u = sum(rating - b_m - avgRating) / (n() + lambda))
+
+  # Prediction
+  predicted_ratings <- test %>%
+    left_join(b_movie, by="movieId") %>%
+    left_join(b_user, by="userId") %>%
+    mutate(prediction = avgRating + b_u + b_m) %>%
+    pull(prediction)
+
+  return(RMSE(predicted_ratings, test$rating))
+})
+
+bestLambda <- lambdas[which.min(rmses)]
+regularizedRmse <- rmses[which.min(rmses)]
+```
+
+The best value for `lambda` was found to be `r bestLambda`. To verify that a value close to a local minima was chosen, a plot can be created that shows each lambda and their respective RMSE values.
+
+```{r fig4, echo=FALSE, fig.align='center', fig.cap="Figure 4: Lambda Tuning"}
+data.frame(lambdas, rmses) %>%
+  ggplot(aes(lambdas, rmses)) +
+  geom_point() +
+  labs(title = "RMSE vs Lambda", x = "Lambda", y = "RMSE")
+```
+
+As seen in Figure 4, the chosen lambda is the best value out the chosen test values. When using this lambda in the regularization model, the RMSE value is `r regularizedRmse`.
+
+# Results
+
+The final rating prediction model takes into account movie and user biases as well as applying regularization. The final test is to use the developed model against the `final_holdout_test` dataset to see how well the model performs.
+
+```{r, eval=FALSE}
+# Movie Effect
+b_movie <- edx %>%
+group_by(movieId) %>%
+summarize(b_m = sum(rating - avgRating) / (n() + bestLambda))
+
+# User Effect
+b_user <- edx %>%
+left_join(b_movie, by="movieId") %>%
+group_by(userId) %>%
+summarize(b_u = sum(rating - b_m - avgRating) / (n() + bestLambda))
+
+# Prediction
+predicted_ratings <- final_holdout_test %>%
+left_join(b_movie, by="movieId") %>%
+left_join(b_user, by="userId") %>%
+mutate(prediction = avgRating + b_u + b_m) %>%
+pull(prediction)
+
+finalRmse <- RMSE(predicted_ratings, final_holdout_test$rating)
+```
+The RMSE for the final test dataset is `r finalRmse` indicating that the model has achieved good predictive performance.
+
+# Conclusion
+
+In this project, a movie rating prediction model was developed based on data from the MovieLens dataset. The model started as a simple average and progressed to include movie and user biases, as well as applying regularization to prevent overfitting. The final model achieved an RMSE value of `r finalRmse` on the holdout test dataset.
+
+While the model performs reasonably well, there are still potential areas for improvement. Future work could try to account for biases caused by user preferences in movie genres or how a movie with multiple genres affects its rating. Additionally, the model is limited to existing movies in the dataset. It would not accurately predict newer titles initially starting with the average movie rating until the model was refined with new ratings.
 
 \pagebreak
 # Reference
 
 ## Figure Code
 
-### Figure 1 Code {#fig1-code}
+### Figure 1 Code
 
 ```{r ref.label="fig1", eval=FALSE}
 ```
 
-### Figure 2 Code {#fig2-code}
+### Figure 2 Code
 
 ```{r ref.label="fig2", eval=FALSE}
 ```
 
-### Figure 3 Code {#fig3-code}
+### Figure 3 Code
 
 ```{r ref.label="fig3", eval=FALSE}
+```
+
+### Figure 4 Code
+
+```{r ref.label="fig4", eval=FALSE}
 ```
 
 ## External References
 The following are references that assisted in creating this rmarkdown file used to generate both the html and pdf documents.
 
 ### PDF Figure Position Fix
-Figures that could not fit on the remainder of a page would be pushed to the next page. However, the text that followed the figures would be placed on the prior page above the image. This created a difference in the output between the html and pdf formats. A forum post provided the required answer to ensure the figures remained in the same locations as defined in the rmarkdown file.
+Figures that could not fit on the remainder of a pdf page would be pushed to the next page. However, the text that followed the figures would be placed on the prior page above the image. This rearrangement created a difference in the output between the html and pdf formats. A forum post provided the required answer to ensure the figures remained in the same locations as defined in the rmarkdown file.
 
 https://forum.posit.co/t/cant-control-position-of-tables-and-figures-in-knitted-pdf-document/37364
