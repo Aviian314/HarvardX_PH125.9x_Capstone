@@ -1,6 +1,6 @@
 ---
 title: "HarvardX PH125.9x Data Science: Capstone  \nMovieLens Rating Prediction Project"
-author: "me"
+author: "Joshua Hendrix"
 date: "`r Sys.Date()`"
 output:
   pdf_document:
@@ -122,7 +122,7 @@ user_bias %>%
 
 ```
 
-Reviewing Figure 3, it can be seen that the user ratings deviation from mean rating follow a normal distribution with the mean being close to the movie's mean rating. The mean user bias is `r mean(user_bias$user_bias)` with a standard deviation of `r sd(user_bias$user_bias)`. Using the standard deviation, the data suggests that approximately 68% of users will rate a movie within a half point of the mean, and about 95% of the users will rate within one point of the mean. However, some users deviate from the mean by several standard deviations. Therefore, the prediction model will need to weigh the outliers less than the users that rate closer to the mean rating of movies.
+Reviewing Figure 3, it can be seen that the user ratings deviation from mean rating follow a normal distribution with the mean being close to the movie's mean rating. The mean user bias is `r mean(user_bias$user_bias)` with a standard deviation of `r sd(user_bias$user_bias)`. Using the standard deviation, the data suggests that approximately 68% of users will rate a movie within a half point of the mean, and about 95% of the users will rate within one point of the mean. However, some users stray from the mean by several standard deviations. Therefore, the prediction model will need to weigh the outliers less than the users that rate closer to the mean rating of movies.
 
 ## Model Development Process
 
@@ -305,6 +305,6 @@ While the model performs reasonably well, there are still potential areas for im
 The following are references that assisted in creating this rmarkdown file used to generate both the html and pdf documents.
 
 ### PDF Figure Position Fix
-Figures that could not fit on the remainder of a pdf page would be pushed to the next page. However, the text that followed the figures would be placed on the prior page above the image. This rearrangement created a difference in the output between the html and pdf formats. A forum post provided the required answer to ensure the figures remained in the same locations as defined in the rmarkdown file.
+Figures that could not fit on the remainder of a pdf page would be pushed to the next page. However, the text that followed the figures would be placed on the prior page above the image. This rearrangement created a difference in the output between the html and pdf formats. The below forum post provided the answer to ensure the figures remained in the same locations as defined in the rmarkdown file.
 
 https://forum.posit.co/t/cant-control-position-of-tables-and-figures-in-knitted-pdf-document/37364
