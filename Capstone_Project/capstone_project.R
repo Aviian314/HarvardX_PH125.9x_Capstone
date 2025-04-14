@@ -62,6 +62,14 @@ mushroom_all_data <- as.data.frame(
   select(-"veil-type") %>%
   mutate(across(everything(), as.factor))
 
+
+
+##### Data Cleanup. #####
+# This dataset was already cleaned in preparation for machine learning
+# so the expectation is that there's nothing to do.
+mushroom_data_has_nulls <- any(is.na(mushroom_all_data))
+mushroom_data_has_nulls
+
 # Faced issues with a column named "class" since this is a reserved key word
 # Changing it to "class_label" to simplify processing
 names(mushroom_all_data)[names(mushroom_all_data) == "class"] <- "class_label"
@@ -72,21 +80,10 @@ names(mushroom_all_data)[names(mushroom_all_data) == "class"] <- "class_label"
 # Split data to get a final holdout test set
 # This set will only be used to test completed models
 set.seed(987)
-splitInd <- createDataPartition(mushroom_all_data$class, p=0.7, list=FALSE)
+splitInd <- createDataPartition(mushroom_all_data$class_label, p=0.7, list=FALSE)
 mushroom_data <- mushroom_all_data[splitInd, ]
 final_test_data <- mushroom_all_data[-splitInd, ]
 rm(mushroom_all_data)
-
-
-
-##### Data Cleanup. #####
-# This dataset was already cleaned in preparation for machine learning
-# so the expectation is that there's nothing to do.
-mushroom_data_has_nulls <- any(is.na(mushroom_data))
-final_test_data_has_nulls <- any(is.na(final_test_data))
-
-mushroom_data_has_nulls
-final_test_data_has_nulls
 
 
 
@@ -239,57 +236,62 @@ ggplot(combined_imp, aes(x = reorder(Variable, Overall),
 
 jack_o_lantern = data.frame(
   `class_label`="p",
-  `cap-shape` = `"c",
-  `cap-surface` = `"s",
-  `cap-color` = `"y",
-  `bruises` = `"FALSE",
-  `odor` = `"n",
-  `gill-attachment` = `"a",
-  `gill-spacing` = `"c",
-  `gill-size` = `"b",
-  `gill-color` = `"y",
-  `stalk-shape` = `"t",
-  `stalk-root` = `"c",
-  `stalk-surface-above-ring` = `"s",
-  `stalk-surface-below-ring` = `"s",
-  `stalk-color-above-ring` = `"o",
-  `stalk-color-below-ring` = `"o",
-  `veil-color` = `"o",
-  `ring-number` = `"o",
-  `ring-type` = `"e",
-  `spore-print-color` = `"w",
-  `population` = `"c",
-  `habitat` = `"d",
+  `cap-shape` = "c",
+  `cap-surface` = "s",
+  `cap-color` = "y",
+  `bruises` = "FALSE",
+  `odor` = "n",
+  `gill-attachment` = "a",
+  `gill-spacing` = "c",
+  `gill-size` = "b",
+  `gill-color` = "y",
+  `stalk-shape` = "t",
+  `stalk-root` = "c",
+  `stalk-surface-above-ring` = "s",
+  `stalk-surface-below-ring` = "s",
+  `stalk-color-above-ring` = "o",
+  `stalk-color-below-ring` = "o",
+  `veil-color` = "o",
+  `ring-number` = "o",
+  `ring-type` = "e",
+  `spore-print-color` = "w",
+  `population` = "c",
+  `habitat` = "d",
   check.names = FALSE
 )
 
 # Predict the mushroom class using the models.
 # simple model: odor "n" => edible
-predict(fit_glm, newdata=jack_o_lantern) # edible
-predict(fit_knn, newdata=jack_o_lantern) # edible
-predict(fit_rf, newdata=jack_o_lantern) # edible
+y_hat_glm_jol <- predict(fit_glm, newdata=jack_o_lantern) # edible
+y_hat_glm_jol
+
+y_hat_knn_jol <- predict(fit_knn, newdata=jack_o_lantern) # edible
+y_hat_knn_jol
+
+y_hat_rf_jol <- predict(fit_rf, newdata=jack_o_lantern) # edible
+y_hat_rf_jol
 
 
 
 ##### Non-Generalization Example #####
 # To further elaborate on the jack-o-lantern example
-# Train a model using forest mushrooms and then 
+# Train a model using woods mushrooms and then
 # predict the grass mushroom's class.
-forest_mushrooms <- mushroom_data %>% filter(habitat == "u")
+woods_mushrooms <- mushroom_data %>% filter(habitat == "d")
 grass_mushrooms <- mushroom_data %>% filter(habitat == "g")
 
-# Train on forest, test on grass
-fit_forest <- train(class_label ~ ., data = forest_mushrooms, method = "glm",
+# Train on woods, test on grass
+fit_woods <- train(class_label ~ ., data = woods_mushrooms, method = "glm",
                     trControl = trainControl(method = "cv"))
-y_hat_grass <- predict(fit_forest, newdata = grass_mushrooms)
+y_hat_grass <- predict(fit_woods, newdata = grass_mushrooms)
 cm_grass <- confusionMatrix(y_hat_grass, grass_mushrooms$class_label)
-cm_grass # Balanced Accuracy: 0.5299
+cm_grass # Balanced Accuracy: 0.8938
 
 # False Positive Rate
 FP <- cm_grass$table["e", "p"]
 TN <- cm_grass$table["p", "p"]
 FPR <- FP / (FP + TN)
-FPR
+FPR # 0.2124
 
 
 
